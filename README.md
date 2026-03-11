@@ -57,9 +57,10 @@ This project aims to build an AI-based forecasting system that predicts **daily 
 ## Setup
 
 ```bash
-#clone github repository 
-git clone https://github.com/AdityaShukla06/vidyut-ai.git
-
+1. fork the GitHub repo 
+#clone the repository 
+git clone https://github.com/<YOUR_USERNAME>/vidyut-ai.git
+ 
 # Create virtual environment
 python -m venv energy_forecast_env
 
@@ -79,7 +80,7 @@ pip install -r requirements.txt
 | Technology | Purpose |
 |---|---|
 | ![Next.js](https://img.shields.io/badge/Next.js-000000?style=flat&logo=nextdotjs&logoColor=white) **Next.js** | React framework for the web dashboard — routing, SSR, and UI |
-| ![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat&logo=tailwindcss&logoColor=white) **Tailwind CSS** | Utility-first styling |
+| ![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat&logo=tailwindcss&logoColor=white) **Tailwind CSS** | For UI Components and Utility-first styling |
 | ![Chart.js](https://img.shields.io/badge/Chart.js-FF6384?style=flat&logo=chartdotjs&logoColor=white) **Chart.js** | Interactive demand forecast visualisations |
 
 ### Backend
@@ -87,14 +88,14 @@ pip install -r requirements.txt
 |---|---|
 | ![Python](https://img.shields.io/badge/Python-3776AB?style=flat&logo=python&logoColor=white) **Python** | Core language for the ML pipeline and API |
 | ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white) **FastAPI** | REST API serving model predictions |
-| ![Uvicorn](https://img.shields.io/badge/Uvicorn-4051B5?style=flat&logo=gunicorn&logoColor=white) **Uvicorn** | ASGI server running the FastAPI application |
+| ![Uvicorn](https://img.shields.io/badge/Uvicorn-4051B5?style=flat&logo=gunicorn&logoColor=white) **Uvicorn** | For running the FastAPI web server application |
 
 ### Machine Learning
 | Technology | Purpose |
 |---|---|
 | ![XGBoost](https://img.shields.io/badge/XGBoost-FF6600?style=flat&logo=python&logoColor=white) **XGBoost** | Gradient boosted regression model for energy demand forecasting |
 | ![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?style=flat&logo=scikitlearn&logoColor=white) **Scikit-learn** | Label encoding, evaluation metrics, and preprocessing utilities |
-| ![Joblib](https://img.shields.io/badge/Joblib-3776AB?style=flat&logo=python&logoColor=white) **Joblib** | Model and encoder serialisation — save and reload without retraining |
+| ![Joblib](https://img.shields.io/badge/Joblib-3776AB?style=flat&logo=python&logoColor=white) **Joblib** | Model and encoder serialisation to save and reload without retraining |
 | ![NumPy](https://img.shields.io/badge/NumPy-013243?style=flat&logo=numpy&logoColor=white) **NumPy** | Numerical operations and cyclic feature computation |
 | ![Pandas](https://img.shields.io/badge/Pandas-150458?style=flat&logo=pandas&logoColor=white) **Pandas** | Data loading, cleaning, and feature engineering |
 ---
