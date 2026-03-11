@@ -52,15 +52,37 @@ interface IndiaMapProps {
 function matchGeoState(geoName: string, markers: LocationMarker[]): LocationMarker | undefined {
     const normalize = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "").replace("and", "");
     const geoNorm = normalize(geoName);
-    return markers.find((m) => m.type === "state" && (
-        normalize(m.name) === geoNorm || geoNorm.includes(normalize(m.name)) || normalize(m.name).includes(geoNorm)
-    ));
+
+    // Manual mapping for common abbreviations in the dataset
+    const nameMap: Record<string, string> = {
+        "hp": "himachalpradesh",
+        "mp": "madhyapradesh",
+        "nrup": "uttarpradesh",
+        "up": "uttarpradesh",
+        "jkutladakhut": "jammu",
+        "dd": "daman",
+        "dnh": "dadra",
+        "ap": "andhrapradesh",
+        "wb": "westbengal",
+        "srkarnataka": "karnataka"
+    };
+
+    return markers.find((m) => {
+        if (m.type !== "state") return false;
+        const mNorm = normalize(m.name);
+        const mappedName = nameMap[mNorm] || mNorm;
+
+        return (
+            mappedName === geoNorm ||
+            geoNorm.includes(mappedName) ||
+            mappedName.includes(geoNorm)
+        );
+    });
 }
 
 export default function IndiaMap({ locations, onMarkerSelect, selectedMarker, onBack }: IndiaMapProps) {
     const [geoData, setGeoData] = useState<GeoJSON.FeatureCollection | null>(null);
     const [loading, setLoading] = useState(true);
-    const [mapReady, setMapReady] = useState(false);
 
     useEffect(() => {
         fetch(GEOJSON_URL)
@@ -77,16 +99,17 @@ export default function IndiaMap({ locations, onMarkerSelect, selectedMarker, on
         : defaultCenter;
     const zoom = selectedMarker ? (selectedMarker.type === "city" ? 9 : 7) : defaultZoom;
 
-    const getStateStyle = useCallback((feature: any) => {
+    const getStateStyle = useCallback((feature?: GeoJSON.Feature) => {
+        if (!feature) return {};
         const geoName =
             feature.properties?.ST_NM ||
             feature.properties?.Name ||
             feature.properties?.NAME ||
             feature.properties?.name || "";
-        
+
         const matched = matchGeoState(geoName, locations);
         const isSelected = matched && selectedMarker && selectedMarker.type === "state" && selectedMarker.name === matched.name;
-        
+
         return {
             fillColor: isSelected ? "#E8652E" : "transparent",
             fillOpacity: isSelected ? 0.2 : 0,
@@ -172,7 +195,7 @@ export default function IndiaMap({ locations, onMarkerSelect, selectedMarker, on
             </div>
 
             <div className="w-full h-[450px] md:h-[550px] rounded-2xl overflow-hidden border border-border">
-                {(loading || !geoData) ? (
+                {loading ? (
                     <div className="w-full h-full flex items-center justify-center bg-cream-dark/50">
                         <Loader2 className="w-8 h-8 text-saffron animate-spin" />
                     </div>
@@ -183,72 +206,72 @@ export default function IndiaMap({ locations, onMarkerSelect, selectedMarker, on
                         className="w-full h-full"
                         scrollWheelZoom={true}
                         zoomControl={true}
-                        whenReady={() => setMapReady(true)}
                     >
-                        {mapReady && (
-                            <>
-                                <TileLayer
-                                    url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-                                    attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-                                />
-                                <MapController center={center} zoom={zoom} />
+                        <TileLayer
+                            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                            attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+                        />
+                        <MapController center={center} zoom={zoom} />
 
-                                {/* GeoJSON state borders */}
-                                {geoData && (
-                                    <GeoJSON data={geoData} style={getStateStyle} onEachFeature={onEachFeature} />
-                                )}
+                        {/* GeoJSON state borders */}
+                        {geoData && (
+                            <GeoJSON 
+                                key={`geojson-${locations.length}-${selectedMarker?.name || "none"}`}
+                                data={geoData} 
+                                style={getStateStyle} 
+                                onEachFeature={onEachFeature} 
+                            />
+                        )}
 
-                                {/* All city markers */}
-                                {cities.map((marker) => {
-                                    const isSelected =
-                                        selectedMarker?.name === marker.name && selectedMarker?.type === "city";
-                                    return (
-                                        <Marker
-                                            key={`city-${marker.name}`}
-                                            position={[marker.lat, marker.lng]}
-                                            icon={createMarkerIcon(isSelected)}
-                                            eventHandlers={{
-                                                click: () => setTimeout(() => onMarkerSelect(marker), 10),
-                                            }}
+                        {/* All city markers */}
+                        {cities.map((marker) => {
+                            const isSelected =
+                                selectedMarker?.name === marker.name && selectedMarker?.type === "city";
+                            return (
+                                <Marker
+                                    key={`city-${marker.name}`}
+                                    position={[marker.lat, marker.lng]}
+                                    icon={createMarkerIcon(isSelected)}
+                                    eventHandlers={{
+                                        click: () => setTimeout(() => onMarkerSelect(marker), 10),
+                                    }}
+                                >
+                                    <Popup>
+                                        <div
+                                            className="min-w-[180px] p-1"
+                                            style={{ fontFamily: "Poppins, sans-serif" }}
                                         >
-                                            <Popup>
-                                                <div
-                                                    className="min-w-[180px] p-1"
-                                                    style={{ fontFamily: "Poppins, sans-serif" }}
-                                                >
-                                                    <h4 className="font-bold text-sm text-navy mb-1">
-                                                        {marker.name}
-                                                    </h4>
-                                                    <p className="text-xs text-text-muted mb-2">
-                                                        📍 City Model Predictor
-                                                    </p>
-                                                    <button
-                                                        onClick={() => onMarkerSelect(marker)}
-                                                        className="w-full py-1.5 bg-saffron text-white rounded-lg text-xs font-semibold"
-                                                    >
-                                                        View City Forecast →
-                                                    </button>
-                                                </div>
-                                            </Popup>
-                                        </Marker>
-                                    );
-                                })}
+                                            <h4 className="font-bold text-sm text-navy mb-1">
+                                                {marker.name}
+                                            </h4>
+                                            <p className="text-xs text-text-muted mb-2">
+                                                📍 City Model Predictor
+                                            </p>
+                                            <button
+                                                onClick={() => onMarkerSelect(marker)}
+                                                className="w-full py-1.5 bg-saffron text-white rounded-lg text-xs font-semibold"
+                                            >
+                                                View City Forecast →
+                                            </button>
+                                        </div>
+                                    </Popup>
+                                </Marker>
+                            );
+                        })}
 
-                                {/* Highlight ring around selected city marker */}
-                                {selectedMarker && selectedMarker.type === "city" && (
-                                    <CircleMarker
-                                        center={[selectedMarker.lat, selectedMarker.lng]}
-                                        radius={35}
-                                        pathOptions={{
-                                            color: "#E8652E",
-                                            fillColor: "#E8652E",
-                                            fillOpacity: 0.06,
-                                            weight: 1,
-                                            opacity: 0.25,
-                                        }}
-                                    />
-                                )}
-                            </>
+                        {/* Highlight ring around selected city marker */}
+                        {selectedMarker && selectedMarker.type === "city" && (
+                            <CircleMarker
+                                center={[selectedMarker.lat, selectedMarker.lng]}
+                                radius={35}
+                                pathOptions={{
+                                    color: "#E8652E",
+                                    fillColor: "#E8652E",
+                                    fillOpacity: 0.06,
+                                    weight: 1,
+                                    opacity: 0.25,
+                                }}
+                            />
                         )}
                     </MapContainer>
                 )}

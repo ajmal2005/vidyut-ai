@@ -1,10 +1,12 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 import uvicorn
 import os
+from datetime import date, timedelta
 
 from scripts.predict_model import predict_energy
 from scripts.predict_state_model import predict_state_energy
+from scripts.predict_india_model import predict_india_energy
 from weather_api import fetch_weather_for_location, LOCATION_COORDS
 
 app = FastAPI(
@@ -87,11 +89,32 @@ def get_state_prediction(req: ForecastStateRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
+@app.get("/predict/india")
+def get_india_prediction(forecast_date: str = Query(default=None, description="Target date in YYYY-MM-DD format. Defaults to tomorrow.")):
+    """Predict national energy demand (Total MU) and peak demand (MW) for India."""
+    try:
+        if forecast_date is None:
+            forecast_date = (date.today() + timedelta(days=1)).isoformat()
+        
+        pred_mu, pred_mw = predict_india_energy(forecast_date)
+        return {
+            "status": "success",
+            "type": "india",
+            "forecast_date": forecast_date,
+            "predicted_demand_mu": round(pred_mu, 2),
+            "predicted_max_demand_mw": round(pred_mw, 2),
+        }
+    except FileNotFoundError as fnf_error:
+        raise HTTPException(status_code=404, detail=str(fnf_error))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
 @app.get("/locations")
 def get_locations():
     """Returns available states and cities based on actual model files."""
     states_dir = os.path.join(os.path.dirname(__file__), "models", "state")
     cities_dir = os.path.join(os.path.dirname(__file__), "models", "city")
+    india_model_path = os.path.join(os.path.dirname(__file__), "models", "india", "India_hybrid_model.pkl")
     cities = []
     if os.path.exists(cities_dir):
         for f in os.listdir(cities_dir):
@@ -110,7 +133,12 @@ def get_locations():
                     lat, lon = LOCATION_COORDS[state_name]
                     states.append({ "name": state_name, "lat": lat, "lng": lon })
                     
-    return {"status": "success", "cities": cities, "states": states}
+    return {
+        "status": "success",
+        "cities": cities,
+        "states": states,
+        "india_model_available": os.path.exists(india_model_path),
+    }
 
 if __name__ == "__main__":
     print("\n[+] Starting Energy Demand Forecasting API on port 8000...")
