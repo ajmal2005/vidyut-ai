@@ -104,12 +104,15 @@ pip install -r requirements.txt
 
 - [x] Problem definition and approach finalised
 - [x] Dataset acquired and explored
-- [ ] Feature engineering designed
-- [ ] Interactive frontend for visualization and user interaction
-- [ ] Notebook structure set up
-- [ ] Model training and evaluation
-- [ ] Prediction function
+- [x] Feature engineering designed
+- [x] Interactive frontend for visualization and user interaction
+- [x] Notebook structure set up
+- [x] Model training and evaluation
+- [x] Prediction function
+- [x] Add Cached values so as to reduce latency
+- [ ] Website UI Fixes
 - [ ] Results and documentation
+- [ ] Backend integration on the website
 
 ---
 
@@ -122,6 +125,6 @@ pip install -r requirements.txt
 3. Mayank Mahavir Chand Bothra [(GitHub)](https://github.com/mayankWHO)
 
 4. Ravi Shankar Singh [(GitHub)](https://github.com/Ravi92680)
- 
+
 
 Built for the **Energy Conservation Week Hackathon 2026**

@@ -1,0 +1,108 @@
+import pandas as pd
+import numpy as np
+import os
+import joblib
+from sklearn.preprocessing import StandardScaler
+import xgboost as xgb
+from sklearn.metrics import mean_absolute_percentage_error
+
+def train_hybrid_target(train_df, test_df, features, target):
+
+    from sklearn.linear_model import LinearRegression
+    
+    # 1. Train the Linear Trend Model
+    trend_model = LinearRegression()
+    trend_model.fit(train_df[['TimeIndex']], train_df[target])
+    
+    train_df = train_df.copy()
+    test_df = test_df.copy()
+    
+    train_df['Trend_Pred'] = trend_model.predict(train_df[['TimeIndex']])
+    train_df['Residuals'] = train_df[target] - train_df['Trend_Pred']
+    test_df['Trend_Pred'] = trend_model.predict(test_df[['TimeIndex']])
+    
+    # 2. Prepare features for XGBoost
+    weights = np.exp(-(train_df['TimeIndex'].max() - train_df['TimeIndex'])/365)
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(train_df[features])
+    X_test_scaled = scaler.transform(test_df[features])
+    
+    # 3. Train the XGBoost Residual Model
+    xgb_model = xgb.XGBRegressor(
+        n_estimators=300, 
+        learning_rate=0.05, 
+        max_depth=5, 
+        subsample=0.8, 
+        colsample_bytree=0.8, 
+        random_state=42
+    )
+    xgb_model.fit(X_train_scaled, train_df['Residuals'], sample_weight=weights)
+    
+    # 4. Evaluate
+    final_predictions = test_df['Trend_Pred'] + xgb_model.predict(X_test_scaled)
+    mape = mean_absolute_percentage_error(test_df[target], final_predictions)
+    
+    return trend_model, scaler, xgb_model, mape
+
+def perform_training():
+    file_path = os.path.join(os.path.dirname(__file__), "..", "..", "State_Daily_Energy_Final.csv") 
+    if not os.path.exists(file_path):
+        print(f"Dataset {os.path.abspath(file_path)} not found.")
+        return
+        
+    df = pd.read_csv(file_path)
+    df['Date'] = pd.to_datetime(df['Date'], dayfirst=True)
+    states = df['State'].unique()
+    results = []
+    
+    for state in states:
+        df_state = df[df["State"] == state].copy().sort_values('Date').dropna(subset=['State_Energy_Required_MU', 'State_Max_Demand_MW']).drop_duplicates(subset=['Date'], keep='last')
+        if len(df_state) < 100: continue
+            
+        print(f"--> Training: {state.upper()} ({len(df_state)} days) <--")
+        min_date = df_state['Date'].min()
+        df_state['TimeIndex'] = (df_state['Date'] - min_date).dt.days
+        
+        features = ["TAvg_C", "Avg_Humidity_pct", "CDD", "Month", "Day", "DayOfWeek", "Is_Weekend", "DayOfYear_Sin", "DayOfYear_Cos", "Month_Sin", "Month_Cos"]
+        
+        train_df = df_state.iloc[:int(len(df_state)*0.8)].copy()
+        test_df = df_state.iloc[int(len(df_state)*0.8):].copy()
+        
+        # Train Total Energy (MU) Models
+        mu_trend, mu_scaler, mu_xgb, mu_mape = train_hybrid_target(train_df, test_df, features, 'State_Energy_Required_MU')
+        
+        # Train Peak Demand (MW) Models
+        mw_trend, mw_scaler, mw_xgb, mw_mape = train_hybrid_target(train_df, test_df, features, 'State_Max_Demand_MW')
+        
+        # Export Dual Model into backend/models/state/
+        models_dir = os.path.join(os.path.dirname(__file__), "..", "models", "state")
+        os.makedirs(models_dir, exist_ok=True)
+        joblib.dump({
+            "min_date": min_date, 
+            "features": features,
+            "mu_models": {
+                "trend_model": mu_trend,
+                "scaler": mu_scaler,
+                "xgb_model": mu_xgb,
+                "target_unit": "MU"
+            },
+            "mw_models": {
+                "trend_model": mw_trend,
+                "scaler": mw_scaler,
+                "xgb_model": mw_xgb,
+                "target_unit": "MW"
+            }
+        }, os.path.join(models_dir, f"{state}_hybrid_model.pkl"))
+        
+        print(f"    Energy (MU) MAPE: {mu_mape*100:.2f}% | Peak (MW) MAPE: {mw_mape*100:.2f}%")
+        results.append({
+            "State": state, 
+            "MU MAPE (%)": round(mu_mape * 100, 2),
+            "MW MAPE (%)": round(mw_mape * 100, 2)
+        })
+
+    print("\n FINAL STATE XGBOOST DUAL-HYBRID LEADERBOARD")
+    print(pd.DataFrame(results).sort_values("MU MAPE (%)").to_string(index=False))
+
+if __name__ == "__main__":
+    perform_training()
