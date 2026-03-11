@@ -92,7 +92,25 @@ def fetch_weather_for_location(location_name: str, target_date: str):
     today = datetime.date.today()
     target_dt = datetime.datetime.strptime(target_date, "%Y-%m-%d").date()
     
-    if target_dt >= today:
+    if target_dt > today + datetime.timedelta(days=14):
+        # Open-Meteo forecast API has limited range (14 days max)
+        # Fallback to historical data from the same day in 2024
+        fallback_year = 2024
+        try:
+            fallback_dt = target_dt.replace(year=fallback_year)
+        except ValueError:
+            # Handle Feb 29 on non-leap years
+            fallback_dt = target_dt.replace(year=fallback_year, day=28)
+            
+        fallback_date_str = fallback_dt.strftime("%Y-%m-%d")
+        url = (
+            f"https://archive-api.open-meteo.com/v1/archive"
+            f"?latitude={lat}&longitude={lon}"
+            f"&daily=temperature_2m_mean,relative_humidity_2m_mean"
+            f"&start_date={fallback_date_str}&end_date={fallback_date_str}"
+            f"&timezone=auto"
+        )
+    elif target_dt >= today:
         url = (
             f"https://api.open-meteo.com/v1/forecast"
             f"?latitude={lat}&longitude={lon}"

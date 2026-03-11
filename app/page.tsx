@@ -8,8 +8,7 @@ import DemandForecastChart from "@/components/DemandForecastChart";
 import GridStressChart from "@/components/GridStressChart";
 import ForecastControls from "@/components/ForecastControls";
 import Footer from "@/components/Footer";
-import type { ForecastMode, ApiPrediction, StateMarker } from "@/lib/types";
-import { STATE_MARKERS } from "@/lib/stateMarkers";
+import type { ForecastMode, ApiPrediction, LocationMarker } from "@/lib/types";
 
 const IndiaMap = dynamic(() => import("@/components/IndiaMap"), {
   ssr: false,
@@ -23,7 +22,7 @@ const IndiaMap = dynamic(() => import("@/components/IndiaMap"), {
   ),
 });
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = "http://127.0.0.1:8000";
 
 /** Real normalised Indian load shape (from Energy datasets). Used to distribute
  *  a single daily MW average across 24 hourly slots — for the chart only. */
@@ -66,6 +65,8 @@ function derivePeakHour(hourly: ApiPrediction["hourlyDemand"]): string {
 /** Build a full ApiPrediction from the raw ML output. */
 function buildPrediction(
   avgMW: number,
+  rawValue: number,
+  rawUnit: string,
   capacityMW: number,
   confidencePct: number,
   locationName: string,
@@ -101,6 +102,8 @@ function buildPrediction(
 
   return {
     predictedDemand: avgMW,
+    rawValue,
+    rawUnit,
     currentCapacity: capacityMW,
     peakHour,
     riskLevel,
@@ -114,7 +117,7 @@ function buildPrediction(
 /** Approximate state-level capacity (MW) — static grid data, not ML output. */
 const STATE_CAPACITY: Record<string, number> = {
   "Delhi": 9000, "ER Odisha": 7000, "Goa": 1000, "Gujarat": 28000,
-  "Haryana": 14000, "HP": 3000, "J&K (UT) & Ladakh (UT)": 3500,
+  "Haryana": 14000, "HP": 3000, "J&K(UT) & Ladakh(UT)": 3500,
   "Jharkhand": 5500, "Kerala": 6500, "Manipur": 700, "Mizoram": 500,
   "MP": 22000, "Nagaland": 600, "NER Meghalaya": 900, "NR UP": 28000,
   "Puducherry": 1300, "Punjab": 15000, "Rajasthan": 22000, "Sikkim": 400,
@@ -122,13 +125,15 @@ const STATE_CAPACITY: Record<string, number> = {
   "Tripura": 800, "Uttarakhand": 4000, "West Bengal": 13000,
   "WR Maharashtra": 32000, "Andhra Pradesh": 15000, "Arunachal Pradesh": 1000,
   "Assam": 2500, "Bihar": 7000, "Chandigarh": 500, "Chhattisgarh": 9000,
-  "DD": 300, "DNH": 400, "DVC": 7000,
+  "DD": 300, "DNH": 400, "DVC": 7000, "NER Tripura": 800, "NER Manipur": 700,
+  "NER Mizoram": 500, "NER Nagaland": 600,
 };
 
 const DEFAULT_CAPACITY = 10000;
 
 export default function Home() {
-  const [selectedMarker, setSelectedMarker] = useState<StateMarker | null>(null);
+  const [locations, setLocations] = useState<LocationMarker[]>([]);
+  const [selectedMarker, setSelectedMarker] = useState<LocationMarker | null>(null);
 
   const [forecastMode, setForecastMode] = useState<ForecastMode>({
     type: "quick",
@@ -140,6 +145,19 @@ export default function Home() {
   const [prediction, setPrediction] = useState<ApiPrediction | null>(null);
   const [isPredicting, setIsPredicting] = useState(false);
   const [predictionError, setPredictionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/locations`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.status === "success") {
+          const cities = data.cities.map((c: any) => ({ ...c, type: "city" }));
+          const states = data.states.map((s: any) => ({ ...s, type: "state" }));
+          setLocations([...states, ...cities]);
+        }
+      })
+      .catch((err) => console.error("Could not fetch locations:", err));
+  }, []);
 
   const targetDate = useMemo(() => {
     if (forecastMode.type === "quick" && forecastMode.hours) {
@@ -167,46 +185,59 @@ export default function Home() {
     setPrediction(null);
 
     try {
-      // Use city endpoint (most specific). Falls back to state endpoint on 404/500.
       let avgMW: number;
+      let rawValue: number;
+      let rawUnit: string;
       let confidencePct = 85;
 
-      const cityRes = await fetch(`${API_BASE}/predict/city`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ city: selectedMarker.cityName, date: targetDateStr }),
-      });
+      if (selectedMarker.type === "city") {
+        const cityRes = await fetch(`${API_BASE}/predict/city`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ city: selectedMarker.name, date: targetDateStr }),
+        });
 
-      if (cityRes.ok) {
+        if (!cityRes.ok) {
+          const errBody = await cityRes.json().catch(() => ({}));
+          throw new Error(errBody?.detail || `API error ${cityRes.status}`);
+        }
+
         const data = await cityRes.json();
-        // Backend returns total daily MWh → convert to average MW
-        avgMW = Math.round(data.predicted_demand_mwh / 24);
-        confidencePct = 90; // city model is more precise
+        rawValue = data.predicted_demand_mwh;
+        rawUnit = "MWh";
+        avgMW = Math.round(rawValue / 24);
+        confidencePct = 90;
       } else {
-        // Fall back to state endpoint
         const stateRes = await fetch(`${API_BASE}/predict/state`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ state: selectedMarker.stateName, date: targetDateStr }),
+          body: JSON.stringify({ state: selectedMarker.name, date: targetDateStr }),
         });
+
         if (!stateRes.ok) {
           const errBody = await stateRes.json().catch(() => ({}));
           throw new Error(errBody?.detail || `API error ${stateRes.status}`);
         }
+
         const data = await stateRes.json();
-        // Backend returns MU (million units = GWh) → convert to average MW
-        avgMW = Math.round((data.predicted_demand_mu * 1000) / 24);
+        rawValue = data.predicted_demand_mu;
+        rawUnit = "MU";
+        // Convert Daily MU (Million Units) to Average MWh for the chart
+        // 1 MU = 1,000 MWh
+        avgMW = Math.round((rawValue * 1000) / 24);
         confidencePct = 80;
       }
 
       const capacity =
-        STATE_CAPACITY[selectedMarker.stateName] ?? DEFAULT_CAPACITY;
+        STATE_CAPACITY[selectedMarker.name] ?? DEFAULT_CAPACITY;
 
       const built = buildPrediction(
         avgMW,
+        rawValue,
+        rawUnit,
         capacity,
         confidencePct,
-        selectedMarker.stateName
+        selectedMarker.name
       );
       setPrediction(built);
     } catch (err: unknown) {
@@ -227,7 +258,7 @@ export default function Home() {
     }, 50);
   };
 
-  const handleMarkerSelect = (marker: StateMarker) => {
+  const handleMarkerSelect = (marker: LocationMarker) => {
     setSelectedMarker(marker);
     scrollToDashboard();
   };
@@ -244,7 +275,7 @@ export default function Home() {
   };
 
   const locationName = selectedMarker
-    ? `${selectedMarker.stateName} (${selectedMarker.cityName})`
+    ? `${selectedMarker.name} (${selectedMarker.type === "state" ? "State" : "City"})`
     : "India (All States)";
 
   const isLoading = isPredicting;
@@ -270,9 +301,7 @@ export default function Home() {
               {selectedMarker && (
                 <>
                   <span className="text-border-hover">/</span>
-                  <span className="text-saffron font-semibold">{selectedMarker.stateName}</span>
-                  <span className="text-border-hover">/</span>
-                  <span className="text-saffron font-semibold">{selectedMarker.cityName}</span>
+                  <span className="text-saffron font-semibold">{selectedMarker.name}</span>
                 </>
               )}
             </div>
@@ -303,7 +332,7 @@ export default function Home() {
 
         <div className="px-5 md:px-10 lg:px-16 space-y-6">
           <IndiaMap
-            states={STATE_MARKERS}
+            locations={locations}
             onMarkerSelect={handleMarkerSelect}
             selectedMarker={selectedMarker}
             onBack={handleBack}

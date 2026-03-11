@@ -96,12 +96,12 @@ export default function KeyMetrics({ prediction, locationName, isLoading, error,
                                 <>
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-5xl md:text-6xl font-bold text-navy tracking-tight font-[family-name:var(--font-poppins)]">
-                                            {prediction.predictedDemand.toLocaleString()}
+                                            {prediction.rawValue.toLocaleString()}
                                         </span>
-                                        <span className="text-lg text-text-muted font-medium">MW avg</span>
+                                        <span className="text-lg text-text-muted font-medium">{prediction.rawUnit}</span>
                                     </div>
                                     <p className="text-xs text-text-muted mt-2">
-                                        Average forecasted demand · Peak at <strong className="text-navy">{prediction.peakHour}</strong>
+                                        Total forecasted demand · Average <strong className="text-navy">{prediction.predictedDemand.toLocaleString()} MW</strong>
                                     </p>
                                     {prediction.demandChangePct !== undefined && (
                                         <div className="flex items-center gap-1.5 mt-2">
@@ -233,43 +233,8 @@ export default function KeyMetrics({ prediction, locationName, isLoading, error,
                     </motion.div>
                 )}
 
-                {/* ── Forecast Confidence ── */}
-                {isLoading ? (
-                    <SkeletonCard className="col-span-2 row-span-1" />
-                ) : (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        whileInView={{ opacity: 1, scale: 1 }}
-                        viewport={{ once: true }}
-                        transition={{ duration: 0.4, delay: 0.24 }}
-                        className="bento-card col-span-2 row-span-1 p-5 flex flex-col justify-between"
-                    >
-                        <div className="flex items-center gap-2">
-                            <div className="p-1.5 rounded-lg bg-navy/5">
-                                <BarChart2 className="w-4 h-4 text-navy" />
-                            </div>
-                            <span className="text-xs font-semibold text-text-secondary">ML Confidence</span>
-                        </div>
-                        {prediction?.confidencePct !== undefined ? (
-                            <div className="flex items-center gap-3">
-                                <span className="text-2xl md:text-3xl font-bold text-navy tracking-tight font-[family-name:var(--font-poppins)]">
-                                    {prediction.confidencePct}%
-                                </span>
-                                <div className="flex-1 h-2 bg-cream-dark rounded-full overflow-hidden">
-                                    <motion.div
-                                        initial={{ width: 0 }}
-                                        whileInView={{ width: `${prediction.confidencePct}%` }}
-                                        viewport={{ once: true }}
-                                        transition={{ duration: 0.9, delay: 0.4 }}
-                                        className="h-full rounded-full bg-gradient-to-r from-navy/60 to-navy"
-                                    />
-                                </div>
-                            </div>
-                        ) : (
-                            <span className="text-2xl md:text-3xl font-bold text-text-muted tracking-tight font-[family-name:var(--font-poppins)]">—</span>
-                        )}
-                    </motion.div>
-                )}
+                
+                
             </div>
         </section>
     );

@@ -13,11 +13,10 @@ export interface HourlyPoint {
   lower?: number;
 }
 
-export interface StateMarker {
-  /** Display name for the state shown in tooltips / breadcrumbs */
-  stateName: string;
-  /** City that is the marker location */
-  cityName: string;
+export interface LocationMarker {
+  /** Display name for the state or city */
+  name: string;
+  type: "state" | "city";
   lat: number;
   lng: number;
 }
@@ -30,7 +29,9 @@ export interface ForecastMode {
 }
 
 export interface ApiPrediction {
-  predictedDemand: number;    // average MW for the day
+  predictedDemand: number;    // average MW for the day (used for charts)
+  rawValue: number;           // Raw value from API (MWh for city, MU for state)
+  rawUnit: string;            // Unit for the raw value
   currentCapacity: number;    // grid capacity in MW
   peakHour: string;           // e.g. "7 PM"
   riskLevel: RiskLevel;

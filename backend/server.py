@@ -3,16 +3,24 @@ from pydantic import BaseModel, Field
 import uvicorn
 import os
 
-import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), "scripts"))
-from predict_model import predict_energy
-from predict_state_model import predict_state_energy
-from weather_api import fetch_weather_for_location
+from scripts.predict_model import predict_energy
+from scripts.predict_state_model import predict_state_energy
+from weather_api import fetch_weather_for_location, LOCATION_COORDS
 
 app = FastAPI(
     title="Energy Demand Forecasting API",
     description="A Machine Learning API that predicts City (MWh) and State (MU) Energy Demand using XGBoost Hybrid Models.",
     version="1.1"
+)
+
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 class ForecastRequest(BaseModel):
@@ -79,7 +87,32 @@ def get_state_prediction(req: ForecastStateRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
+@app.get("/locations")
+def get_locations():
+    """Returns available states and cities based on actual model files."""
+    states_dir = os.path.join(os.path.dirname(__file__), "models", "state")
+    cities_dir = os.path.join(os.path.dirname(__file__), "models", "city")
+    cities = []
+    if os.path.exists(cities_dir):
+        for f in os.listdir(cities_dir):
+            if f.endswith("_hybrid_model.pkl"):
+                city_name = f.replace("_hybrid_model.pkl", "")
+                if city_name in LOCATION_COORDS:
+                    lat, lon = LOCATION_COORDS[city_name]
+                    cities.append({ "name": city_name, "lat": lat, "lng": lon })
+                
+    states = []
+    if os.path.exists(states_dir):
+        for f in os.listdir(states_dir):
+            if f.endswith("_hybrid_model.pkl"):
+                state_name = f.replace("_hybrid_model.pkl", "")
+                if state_name in LOCATION_COORDS:
+                    lat, lon = LOCATION_COORDS[state_name]
+                    states.append({ "name": state_name, "lat": lat, "lng": lon })
+                    
+    return {"status": "success", "cities": cities, "states": states}
+
 if __name__ == "__main__":
     print("\n[+] Starting Energy Demand Forecasting API on port 8000...")
     print("[+] API Documentation available at: http://localhost:8000/docs\n")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
