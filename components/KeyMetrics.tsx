@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Zap, Power, Clock, TrendingUp, TrendingDown, AlertTriangle, CheckCircle } from "lucide-react";
+import { Zap, Power, Database, TrendingUp, TrendingDown, AlertTriangle, CheckCircle } from "lucide-react";
 import type { ApiPrediction } from "@/lib/types";
 
 interface MetricsProps {
@@ -71,7 +71,7 @@ export default function KeyMetrics({ prediction, locationName, isLoading, error 
             {/* Bento Grid */}
             <div className="grid grid-cols-4 md:grid-cols-8 gap-4 auto-rows-[120px]">
 
-                {/* ── Predicted Demand — large card, 4 cols × 2 rows ── */}
+                {/* ── Total Power Required — large card, 4 cols × 2 rows ── */}
                 {isLoading ? (
                     <SkeletonLarge />
                 ) : (
@@ -84,10 +84,10 @@ export default function KeyMetrics({ prediction, locationName, isLoading, error 
                     >
                         <div className="flex items-center gap-2.5">
                             <div className="p-2 rounded-xl bg-saffron/10">
-                                <Zap className="w-5 h-5 text-saffron" />
+                                <Database className="w-5 h-5 text-saffron" />
                             </div>
                             <span className="text-sm font-semibold text-text-secondary">
-                                {prediction ? "ML Predicted Demand" : "Predicted Demand"}
+                                {prediction ? "Total Power Required" : "Total Power Required"}
                             </span>
                         </div>
                         <div>
@@ -95,12 +95,12 @@ export default function KeyMetrics({ prediction, locationName, isLoading, error 
                                 <>
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-5xl md:text-6xl font-bold text-navy tracking-tight font-[family-name:var(--font-poppins)]">
-                                            {prediction.predictedDemand.toLocaleString()}
+                                            {prediction.rawValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                                         </span>
-                                        <span className="text-lg text-text-muted font-medium">MW avg</span>
+                                        <span className="text-lg text-text-muted font-medium">{prediction.rawUnit}</span>
                                     </div>
-                                    <p className="text-xs text-text-muted mt-2">
-                                        Average forecasted demand · Peak at <strong className="text-navy">{prediction.peakHour}</strong>
+                                    <p className="text-xs text-text-muted mt-6">
+                                        Total forecasted energy · Peak at <strong className="text-navy">{prediction.peakHour}</strong>
                                     </p>
                                     {prediction.demandChangePct !== undefined && (
                                         <div className="flex items-center gap-1.5 mt-2">
@@ -173,7 +173,7 @@ export default function KeyMetrics({ prediction, locationName, isLoading, error 
                     </motion.div>
                 )}
 
-                {/* ── Peak Time ── */}
+                {/* ── Peak Demand ── */}
                 {isLoading ? (
                     <SkeletonCard className="col-span-2 row-span-1" />
                 ) : (
@@ -186,13 +186,18 @@ export default function KeyMetrics({ prediction, locationName, isLoading, error 
                     >
                         <div className="flex items-center gap-2">
                             <div className="p-1.5 rounded-lg bg-navy/5">
-                                <Clock className="w-4 h-4 text-navy" />
+                                <Zap className="w-4 h-4 text-navy" />
                             </div>
-                            <span className="text-xs font-semibold text-text-secondary">Peak Time</span>
+                            <span className="text-xs font-semibold text-text-secondary">Peak Demand</span>
                         </div>
-                        <span className="text-2xl md:text-3xl font-bold text-navy tracking-tight font-[family-name:var(--font-poppins)]">
-                            {prediction ? prediction.peakHour : "—"}
-                        </span>
+                        <div className="flex items-baseline gap-1.5">
+                            <span className="text-2xl md:text-3xl font-bold text-navy tracking-tight font-[family-name:var(--font-poppins)]">
+                                {prediction ? prediction.predictedPeakMW.toLocaleString() : "—"}
+                            </span>
+                            {prediction && (
+                                <span className="text-sm text-text-muted font-medium">MW</span>
+                            )}
+                        </div>
                     </motion.div>
                 )}
 

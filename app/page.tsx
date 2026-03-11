@@ -295,9 +295,10 @@ export default function Home() {
           throw new Error(errBody?.detail || `API error ${cityRes.status}`);
         }
         const data = await cityRes.json();
-        rawValue = data.predicted_demand_mwh;
-        rawUnit = "MWh";
-        avgMW = Math.round(rawValue / 24);
+        const mwh = data.predicted_demand_mwh;
+        rawValue = mwh / 1000; // convert MWh → MU (1 MU = 1000 MWh)
+        rawUnit = "MU";
+        avgMW = Math.round((rawValue * 1000) / 24); // MU → MWh → average MW
         peakMW = undefined; // cities: derive from curve
         confidencePct = 90;
       } else {

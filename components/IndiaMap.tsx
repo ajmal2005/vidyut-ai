@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap, GeoJSON, CircleMarker } from "react-leaflet";
 import L from "leaflet";
 import { motion } from "framer-motion";
@@ -80,6 +80,10 @@ function matchGeoState(geoName: string, markers: LocationMarker[]): LocationMark
     });
 }
 
+// Stable module-level constant — never recreated on re-renders
+const DEFAULT_CENTER: [number, number] = [22.5, 82.0];
+const DEFAULT_ZOOM = 5;
+
 export default function IndiaMap({ locations, onMarkerSelect, selectedMarker, onBack }: IndiaMapProps) {
     const [geoData, setGeoData] = useState<GeoJSON.FeatureCollection | null>(null);
     const [loading, setLoading] = useState(true);
@@ -91,13 +95,14 @@ export default function IndiaMap({ locations, onMarkerSelect, selectedMarker, on
             .catch(() => setLoading(false));
     }, []);
 
-    const defaultCenter: [number, number] = [22.5, 82.0];
-    const defaultZoom = 5;
-
-    const center: [number, number] = selectedMarker
-        ? [selectedMarker.lat, selectedMarker.lng]
-        : defaultCenter;
-    const zoom = selectedMarker ? (selectedMarker.type === "city" ? 9 : 7) : defaultZoom;
+    // useMemo ensures center/zoom only change when selectedMarker actually changes,
+    // preventing MapController's useEffect from firing on every re-render.
+    const { center, zoom } = useMemo(() => ({
+        center: selectedMarker
+            ? [selectedMarker.lat, selectedMarker.lng] as [number, number]
+            : DEFAULT_CENTER,
+        zoom: selectedMarker ? (selectedMarker.type === "city" ? 9 : 7) : DEFAULT_ZOOM,
+    }), [selectedMarker]);
 
     const getStateStyle = useCallback((feature?: GeoJSON.Feature) => {
         if (!feature) return {};
@@ -201,8 +206,11 @@ export default function IndiaMap({ locations, onMarkerSelect, selectedMarker, on
                     </div>
                 ) : (
                     <MapContainer
-                        center={defaultCenter}
-                        zoom={defaultZoom}
+                        center={DEFAULT_CENTER}
+                        zoom={DEFAULT_ZOOM}
+                        minZoom={4}
+                        maxBounds={[[-90, -180], [90, 180]]}
+                        maxBoundsViscosity={1.0}
                         className="w-full h-full"
                         scrollWheelZoom={true}
                         zoomControl={true}
@@ -210,6 +218,7 @@ export default function IndiaMap({ locations, onMarkerSelect, selectedMarker, on
                         <TileLayer
                             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
                             attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+                            noWrap={true}
                         />
                         <MapController center={center} zoom={zoom} />
 

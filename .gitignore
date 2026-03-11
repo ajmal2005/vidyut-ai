@@ -43,3 +43,6 @@ next-env.d.ts
 #pycache
 /backend/__pycache__
 /backend/scripts/__pycache__
+
+/.vscode
+/backend/charts
