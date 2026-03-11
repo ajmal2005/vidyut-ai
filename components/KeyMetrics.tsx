@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Zap, Power, Clock, TrendingUp, TrendingDown, BarChart2, AlertTriangle, CheckCircle } from "lucide-react";
+import { Zap, Power, Clock, TrendingUp, TrendingDown, AlertTriangle, CheckCircle } from "lucide-react";
 import type { ApiPrediction } from "@/lib/types";
 
 interface MetricsProps {
@@ -9,7 +9,6 @@ interface MetricsProps {
     locationName: string;
     isLoading: boolean;
     error: string | null;
-    onRetry: () => void;
 }
 
 function SkeletonCard({ className }: { className?: string }) {
@@ -36,7 +35,7 @@ function SkeletonLarge() {
     );
 }
 
-export default function KeyMetrics({ prediction, locationName, isLoading, error, onRetry }: MetricsProps) {
+export default function KeyMetrics({ prediction, locationName, isLoading, error }: MetricsProps) {
     const utilizationPct = prediction
         ? Math.round((prediction.predictedPeakMW / prediction.currentCapacity) * 100)
         : null;
@@ -62,10 +61,10 @@ export default function KeyMetrics({ prediction, locationName, isLoading, error,
                     {isLoading
                         ? "Fetching ML prediction…"
                         : error
-                        ? "Select a location on the map to load forecast data"
-                        : prediction
-                        ? <>Showing ML forecast for <span className="text-saffron font-semibold">{locationName}</span></>
-                        : <>Select a location on the map to view <span className="text-saffron font-semibold">live ML predictions</span></>}
+                            ? "Select a location on the map to load forecast data"
+                            : prediction
+                                ? <>Showing ML forecast for <span className="text-saffron font-semibold">{locationName}</span></>
+                                : <>Select a location on the map to view <span className="text-saffron font-semibold">live ML predictions</span></>}
                 </p>
             </motion.div>
 
@@ -96,12 +95,12 @@ export default function KeyMetrics({ prediction, locationName, isLoading, error,
                                 <>
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-5xl md:text-6xl font-bold text-navy tracking-tight font-[family-name:var(--font-poppins)]">
-                                            {prediction.rawValue.toLocaleString()}
+                                            {prediction.predictedDemand.toLocaleString()}
                                         </span>
-                                        <span className="text-lg text-text-muted font-medium">{prediction.rawUnit}</span>
+                                        <span className="text-lg text-text-muted font-medium">MW avg</span>
                                     </div>
                                     <p className="text-xs text-text-muted mt-2">
-                                        Total forecasted demand · Average <strong className="text-navy">{prediction.predictedDemand.toLocaleString()} MW</strong>
+                                        Average forecasted demand · Peak at <strong className="text-navy">{prediction.peakHour}</strong>
                                     </p>
                                     {prediction.demandChangePct !== undefined && (
                                         <div className="flex items-center gap-1.5 mt-2">
@@ -189,19 +188,11 @@ export default function KeyMetrics({ prediction, locationName, isLoading, error,
                             <div className="p-1.5 rounded-lg bg-navy/5">
                                 <Clock className="w-4 h-4 text-navy" />
                             </div>
-                            <span className="text-xs font-semibold text-text-secondary">Peak Demand</span>
+                            <span className="text-xs font-semibold text-text-secondary">Peak Time</span>
                         </div>
-                        <div className="flex items-baseline gap-1.5">
-                            <span className="text-2xl md:text-3xl font-bold text-navy tracking-tight font-[family-name:var(--font-poppins)]">
-                                {prediction ? prediction.predictedPeakMW.toLocaleString() : "—"}
-                            </span>
-                            <span className="text-sm text-text-muted">MW</span>
-                        </div>
-                        {prediction && (
-                            <p className="text-[10px] text-text-muted mt-1">
-                                Occurs at <strong className="text-navy">{prediction.peakHour}</strong>
-                            </p>
-                        )}
+                        <span className="text-2xl md:text-3xl font-bold text-navy tracking-tight font-[family-name:var(--font-poppins)]">
+                            {prediction ? prediction.peakHour : "—"}
+                        </span>
                     </motion.div>
                 )}
 
@@ -216,7 +207,7 @@ export default function KeyMetrics({ prediction, locationName, isLoading, error,
                         transition={{ duration: 0.4, delay: 0.2 }}
                         className="bento-card col-span-2 row-span-1 p-5 flex flex-col justify-between bg-gradient-to-br from-india-green-bg/50 to-white"
                     >
-                        <span className="text-xs font-semibold text-text-secondary">Peak Load Factor</span>
+                        <span className="text-xs font-semibold text-text-secondary">Capacity Used</span>
                         {utilizationPct !== null ? (
                             <div className="flex items-center gap-3">
                                 <span className="text-2xl md:text-3xl font-bold text-india-green tracking-tight font-[family-name:var(--font-poppins)]">
@@ -231,7 +222,7 @@ export default function KeyMetrics({ prediction, locationName, isLoading, error,
                                         className={`h-full rounded-full ${utilizationPct > 85
                                             ? "bg-gradient-to-r from-saffron to-[#E15320]"
                                             : "bg-gradient-to-r from-india-green to-india-green-light"
-                                        }`}
+                                            }`}
                                     />
                                 </div>
                             </div>
@@ -241,8 +232,8 @@ export default function KeyMetrics({ prediction, locationName, isLoading, error,
                     </motion.div>
                 )}
 
-                
-                
+
+
             </div>
         </section>
     );

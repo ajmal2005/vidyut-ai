@@ -14,6 +14,7 @@ export default function ForecastControls({ currentMode, onModeChange }: Forecast
     const [isMounted, setIsMounted] = useState(false);
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [customDateStr, setCustomDateStr] = useState<string>("");
+    const [pendingDate, setPendingDate] = useState<Date | null>(null);
 
     useEffect(() => {
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -53,14 +54,24 @@ export default function ForecastControls({ currentMode, onModeChange }: Forecast
     const handleAdvancedSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedDate = new Date(e.target.value);
         setCustomDateStr(e.target.value);
+        // Only track locally — do NOT close or commit yet.
+        // The user may still be navigating months in the date picker.
         if (!isNaN(selectedDate.getTime())) {
+            setPendingDate(selectedDate);
+        }
+    };
+
+    const handleConfirm = () => {
+        const dateToCommit = pendingDate ?? (currentMode.type === "advanced" ? currentMode.targetDate ?? null : null);
+        if (dateToCommit) {
             onModeChange({
                 type: "advanced",
-                targetDate: selectedDate,
-                label: `Forecast Until ${formatDate(selectedDate)}`
+                targetDate: dateToCommit,
+                label: `Forecast Until ${formatDate(dateToCommit)}`
             });
-            setShowAdvanced(false);
         }
+        setShowAdvanced(false);
+        setPendingDate(null);
     };
 
     return (
@@ -161,14 +172,13 @@ export default function ForecastControls({ currentMode, onModeChange }: Forecast
                                         />
                                     </div>
 
-                                    {currentMode.type === "advanced" && (
-                                        <button
-                                            onClick={() => setShowAdvanced(false)}
-                                            className="mt-2 w-full py-2.5 bg-saffron/10 text-saffron hover:bg-saffron hover:text-white transition-colors rounded-xl text-sm font-semibold"
-                                        >
-                                            Confirm Selection
-                                        </button>
-                                    )}
+                                    <button
+                                        onClick={handleConfirm}
+                                        disabled={!pendingDate && currentMode.type !== "advanced"}
+                                        className="mt-2 w-full py-2.5 bg-saffron/10 text-saffron hover:bg-saffron hover:text-white transition-colors rounded-xl text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                        Confirm Selection
+                                    </button>
                                 </div>
                             </motion.div>
                         )}

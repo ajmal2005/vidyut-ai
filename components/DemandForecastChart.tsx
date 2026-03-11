@@ -19,7 +19,6 @@ interface DemandChartProps {
     locationName: string;
     isLoading: boolean;
     demandChangePct?: number;
-    confidencePct?: number;
     peakHour?: string;
 }
 
@@ -34,8 +33,6 @@ function CustomTooltip({
 }) {
     if (!active || !payload?.length) return null;
     const predicted = payload.find((p) => p.dataKey === "predicted");
-    const upper = payload.find((p) => p.dataKey === "upper");
-    const lower = payload.find((p) => p.dataKey === "lower");
     return (
         <div className="bg-white rounded-xl p-3 text-xs border border-border shadow-lg min-w-[160px]">
             <p className="text-navy font-semibold mb-2">{label}</p>
@@ -44,13 +41,6 @@ function CustomTooltip({
                     <span className="w-2 h-2 rounded-full bg-[#E8652E]" />
                     <span className="text-text-muted">Predicted:</span>
                     <span className="text-navy font-semibold ml-auto">{predicted.value.toLocaleString()} MW</span>
-                </div>
-            )}
-            {upper && lower && (
-                <div className="flex items-center gap-2 text-text-muted">
-                    <span className="w-2 h-2 rounded-full bg-[#E8652E]/30" />
-                    <span>Confidence band:</span>
-                    <span className="ml-auto">{lower.value.toLocaleString()}–{upper.value.toLocaleString()}</span>
                 </div>
             )}
         </div>
@@ -71,7 +61,6 @@ export default function DemandForecastChart({
     locationName,
     isLoading,
     demandChangePct,
-    confidencePct,
     peakHour,
 }: DemandChartProps) {
     // Find peak hour index for reference line
@@ -79,9 +68,8 @@ export default function DemandForecastChart({
         ? data.reduce((max, h) => (h.predicted > max.predicted ? h : max), data[0])
         : null;
 
-    const hasConfidenceBand = data.some((d) => d.upper !== undefined && d.lower !== undefined);
 
-    const ChangeBadge = () => {
+    const renderChangeBadge = () => {
         if (demandChangePct === undefined) return null;
         const isUp = demandChangePct > 0;
         const isFlat = Math.abs(demandChangePct) < 0.05;
@@ -121,11 +109,11 @@ export default function DemandForecastChart({
                         </p>
                     </div>
                 </div>
-                <ChangeBadge />
+                {renderChangeBadge()}
             </div>
 
             {/* Stats strip */}
-            {!isLoading && (peakHour || confidencePct !== undefined) && (
+            {!isLoading && peakHour && (
                 <div className="flex gap-4 mb-4 px-1">
                     {peakHour && (
                         <div className="text-center">
@@ -137,12 +125,6 @@ export default function DemandForecastChart({
                         <div className="text-center">
                             <p className="text-[10px] text-text-muted uppercase tracking-wide">Peak Demand</p>
                             <p className="text-sm font-bold text-saffron">{peakPoint.predicted.toLocaleString()} MW</p>
-                        </div>
-                    )}
-                    {confidencePct !== undefined && (
-                        <div className="text-center">
-                            <p className="text-[10px] text-text-muted uppercase tracking-wide">Confidence</p>
-                            <p className="text-sm font-bold text-navy">{confidencePct}%</p>
                         </div>
                     )}
                 </div>
@@ -158,7 +140,7 @@ export default function DemandForecastChart({
                     </div>
                 ) : (
                     <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                        <AreaChart data={data} margin={{ top: 20, right: 4, left: -20, bottom: 0 }}>
+                        <AreaChart data={data} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
                             <defs>
                                 <linearGradient id="predGrad" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stopColor="#E8652E" stopOpacity={0.28} />
@@ -181,40 +163,19 @@ export default function DemandForecastChart({
                                 tick={{ fill: "#9CA0B0", fontSize: 10 }}
                                 axisLine={false}
                                 tickLine={false}
+                                width={45}
+                                tickFormatter={(value) => value >= 1000 ? `${(value / 1000).toFixed(0)}k` : value}
                             />
                             <Tooltip content={<CustomTooltip />} />
                             <Legend
                                 wrapperStyle={{ paddingTop: 8, fontSize: 11 }}
-                                formatter={(v: string) => (
+                                formatter={() => (
                                     <span className="text-text-secondary text-xs">
-                                        {v === "predicted" ? "Predicted Demand (MW)" : v === "upper" ? "Upper Bound" : "Lower Bound"}
+                                        Predicted Demand (MW)
                                     </span>
                                 )}
                             />
 
-                            {/* Confidence band (upper/lower) */}
-                            {hasConfidenceBand && (
-                                <>
-                                    <Area
-                                        type="monotone"
-                                        dataKey="upper"
-                                        stroke="transparent"
-                                        fill="url(#bandGrad)"
-                                        dot={false}
-                                        legendType="none"
-                                        tooltipType="none"
-                                    />
-                                    <Area
-                                        type="monotone"
-                                        dataKey="lower"
-                                        stroke="transparent"
-                                        fill="white"
-                                        dot={false}
-                                        legendType="none"
-                                        tooltipType="none"
-                                    />
-                                </>
-                            )}
 
                             {/* Main predicted demand line */}
                             <Area
@@ -227,16 +188,6 @@ export default function DemandForecastChart({
                                 activeDot={{ r: 5, fill: "#E8652E", strokeWidth: 0 }}
                             />
 
-                            {/* Peak hour reference line */}
-                            {peakPoint && (
-                                <ReferenceLine
-                                    x={peakPoint.time}
-                                    stroke="#E8652E"
-                                    strokeDasharray="4 3"
-                                    strokeWidth={1.5}
-                                    label={{ value: "Peak", position: "top", fill: "#E8652E", fontSize: 10, fontWeight: 700 }}
-                                />
-                            )}
                         </AreaChart>
                     </ResponsiveContainer>
                 )}

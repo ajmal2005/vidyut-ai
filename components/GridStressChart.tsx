@@ -56,7 +56,7 @@ function CustomTooltip({
             {util !== null && (
                 <div className="mt-1.5 pt-1.5 border-t border-border">
                     <div className="flex items-center gap-2">
-                        <span className="text-text-muted">Load factor:</span>
+                        <span className="text-text-muted">Utilization:</span>
                         <span className={`font-semibold ml-auto ${util > 90 ? "text-red-600" : util > 80 ? "text-saffron" : "text-india-green"}`}>
                             {util}%
                         </span>
@@ -156,7 +156,7 @@ export default function GridStressChart({
                     </div>
                 ) : (
                     <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                        <ComposedChart data={data} margin={{ top: 8, right: 4, left: -20, bottom: 0 }}>
+                        <ComposedChart data={data} margin={{ top: 8, right: 20, left: 0, bottom: 0 }}>
                             <defs>
                                 <linearGradient id="demandGrad" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stopColor="#E8652E" stopOpacity={0.18} />
@@ -175,6 +175,8 @@ export default function GridStressChart({
                                 tick={{ fill: "#9CA0B0", fontSize: 10 }}
                                 axisLine={false}
                                 tickLine={false}
+                                width={45}
+                                tickFormatter={(value) => value >= 1000 ? `${(value / 1000).toFixed(0)}k` : value}
                             />
                             <Tooltip content={<CustomTooltip />} />
                             <Legend
@@ -208,35 +210,6 @@ export default function GridStressChart({
                                 activeDot={{ r: 4, fill: "#1B8B3D", strokeWidth: 0 }}
                             />
 
-                            {/* 85% stress threshold reference line */}
-                            {data[0]?.capacity && (
-                                <ReferenceLine
-                                    y={Math.round(data[0].capacity * 0.85)}
-                                    stroke="#E8652E"
-                                    strokeDasharray="3 4"
-                                    strokeWidth={1}
-                                    strokeOpacity={0.5}
-                                    label={{
-                                        value: "85% threshold",
-                                        position: "insideTopRight",
-                                        fill: "#E8652E",
-                                        fontSize: 9,
-                                        opacity: 0.7,
-                                    }}
-                                />
-                            )}
-
-                            {/* First high-stress hour marker */}
-                            {firstStress && (
-                                <ReferenceLine
-                                    x={firstStress}
-                                    stroke="#E8652E"
-                                    strokeDasharray="4 3"
-                                    strokeWidth={1.5}
-                                    strokeOpacity={0.6}
-                                    label={{ value: "Stress start", position: "top", fill: "#E8652E", fontSize: 9 }}
-                                />
-                            )}
                         </ComposedChart>
                     </ResponsiveContainer>
                 )}

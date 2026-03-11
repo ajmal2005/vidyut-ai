@@ -29,12 +29,12 @@ export interface ForecastMode {
 }
 
 export interface ApiPrediction {
-  predictedDemand: number;    // average MW for the day (used for charts)
+  predictedDemand: number;    // average MW for the day
+  predictedPeakMW: number;    // peak load for the day
   rawValue: number;           // Raw value from API (MWh for city, MU for state)
   rawUnit: string;            // Unit for the raw value
   currentCapacity: number;    // grid capacity in MW
   peakHour: string;           // e.g. "7 PM"
-  predictedPeakMW: number;    // Peak MW for the day
   riskLevel: RiskLevel;
   hourlyDemand: HourlyPoint[];
   insights: string[];

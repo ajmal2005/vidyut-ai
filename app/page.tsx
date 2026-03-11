@@ -24,35 +24,87 @@ const IndiaMap = dynamic(() => import("@/components/IndiaMap"), {
 
 const API_BASE = "http://127.0.0.1:8000";
 
-/** Real normalised Indian load shape (from Energy datasets). Used to distribute
- *  a single daily MW average across 24 hourly slots — for the chart only. */
-const LOAD_SHAPE = [
-  0.8623, 0.8399, 0.8197, 0.8148, 0.8316, 0.8977,
-  0.9698, 1.0468, 1.1154, 1.1781, 1.2050, 1.1957,
-  1.1740, 1.1409, 1.1043, 1.0793, 1.0503, 1.0322,
-  1.0421, 1.0170, 0.9603, 0.9137, 0.8732, 0.8359,
-];
+function getDynamicLoadShape(dateStr?: string, locationName?: string): number[] {
+  const date = dateStr ? new Date(dateStr) : new Date();
+  const month = date.getMonth();
+  const isSummer = month >= 3 && month <= 6; // Apr-Jul
+  const isWinter = month >= 10 || month <= 1; // Nov-Feb
 
-/** Convert a daily average MW figure into a 24-hour curve using the real load shape. */
+  // Generate a pseudo-random seed based on date and location
+  const str = (dateStr || "") + (locationName || "");
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0; // Convert to 32bit integer
+  }
+  const random = Math.abs(hash) / 2147483647 || 0.5; // 0 to 1
+
+  const base = [
+    0.70, 0.68, 0.65, 0.64, 0.68, 0.75,
+    0.85, 0.95, 1.05, 1.10, 1.15, 1.12,
+    1.08, 1.05, 1.04, 1.06, 1.10, 1.18,
+    1.25, 1.35, 1.45, 1.30, 1.15, 0.90
+  ];
+
+  // Add some daily noise to all hours (±5%)
+  for (let i = 0; i < 24; i++) {
+    base[i] += (Math.sin(hash + i) * 0.05);
+  }
+
+  if (isSummer) {
+    // Summer afternoon peaks due to AC (2 PM - 5 PM)
+    const summerBoost = 0.35 + (random * 0.25); 
+    base[14] += summerBoost * 0.8;
+    base[15] += summerBoost;       // 3 PM
+    base[16] += summerBoost * 0.9;
+  } else if (isWinter) {
+    // Winter morning and evening peaks
+    const winterBoost = 0.15 + (random * 0.15);
+    base[8] += winterBoost;
+    base[9] += winterBoost;
+    base[19] += winterBoost * 1.2; // 7 PM
+    base[20] += winterBoost * 1.1; // 8 PM
+  } else {
+    // Transition months
+    const shift = Math.floor(random * 3); // 0, 1, or 2 (7 PM, 8 PM, or 9 PM)
+    base[19 + shift] += 0.20 + (random * 0.1); 
+  }
+
+  // Ensure positive values
+  return base.map(v => Math.max(0.1, v));
+}
+
 function buildHourlyCurve(
   avgMW: number,
+  peakMW: number | undefined,
   capacityMW: number,
-  confidencePct: number
+  confidencePct: number,
+  dateStr?: string,
+  locationName?: string
 ): ApiPrediction["hourlyDemand"] {
-  return LOAD_SHAPE.map((factor, i) => {
-    const predicted = Math.round(avgMW * factor);
+  const shape = getDynamicLoadShape(dateStr, locationName);
+  const maxFactor = Math.max(...shape);
+  const curvePeak = avgMW * maxFactor;
+
+  return shape.map((factor, i) => {
+    let predicted = Math.round(avgMW * factor);
+    
+    // Scale curve to exactly match the API's peakMW if provided
+    if (peakMW) {
+      predicted = Math.round((predicted / curvePeak) * peakMW);
+    }
+
     const uncertainty = predicted * ((1 - confidencePct / 100) * 0.3);
     return {
       time: `${i.toString().padStart(2, "0")}:00`,
       predicted,
-      capacity: Math.round(capacityMW * (0.95 + (1.205 - factor) * 0.1)),
+      capacity: capacityMW,
       upper: Math.round(predicted + uncertainty),
       lower: Math.max(0, Math.round(predicted - uncertainty)),
     };
   });
 }
 
-/** Derive peak hour from a load curve */
 function derivePeakHour(hourly: ApiPrediction["hourlyDemand"]): string {
   const peak = hourly.reduce((max, h) => (h.predicted > max.predicted ? h : max), hourly[0]);
   const hour = parseInt(peak.time);
@@ -62,24 +114,33 @@ function derivePeakHour(hourly: ApiPrediction["hourlyDemand"]): string {
   return `${hour - 12} PM`;
 }
 
-/** Build a full ApiPrediction from the raw ML output. */
+/** Build a full ApiPrediction from the raw ML output.
+ *  Pass peakMW when the ML provides it directly (states).
+ *  Leave undefined for cities/India — it will be derived from the curve. */
 function buildPrediction(
   avgMW: number,
-  peakMW: number,
+  peakMW: number | undefined,
   rawValue: number,
   rawUnit: string,
   capacityMW: number,
   confidencePct: number,
   locationName: string,
+  targetDateStr: string,
   demandChangePct?: number
 ): ApiPrediction {
-  const hourly = buildHourlyCurve(avgMW, capacityMW, confidencePct);
+  const hourly = buildHourlyCurve(avgMW, peakMW, capacityMW, confidencePct, targetDateStr, locationName);
   const peakHour = derivePeakHour(hourly);
-  
-  // For cities (where peakMW is undefined), derive peak from the curve. 
-  // For states, use the specific ML peak prediction provided.
-  const actualPeakMW = peakMW ?? Math.max(...hourly.map(h => h.predicted));
 
+  // Use ML-predicted peak when available (states); otherwise derive from curve
+  const actualPeakMW = peakMW ?? Math.max(...hourly.map((h) => h.predicted));
+
+  // ✅ CRITICAL: Calculate the REAL average of the hourly points.
+  // This ensures the header card and the chart match perfectly.
+  const actualAvgMW = Math.round(
+    hourly.reduce((acc, h) => acc + h.predicted, 0) / hourly.length
+  );
+
+  // Risk based on peak utilization — more accurate than average
   const utilization = actualPeakMW / capacityMW;
   let riskLevel: ApiPrediction["riskLevel"] = "Low";
   if (utilization > 0.95) riskLevel = "Critical";
@@ -94,24 +155,26 @@ function buildPrediction(
       : "";
 
   const insights = [
-    `Peak demand of ${peakMW.toLocaleString()} MW expected around ${peakHour}.`,
-    `Average forecasted demand: ${avgMW.toLocaleString()} MW.`,
-    changeLabel ? `Demand change: ${changeLabel}.` : `Grid utilization reaching ${Math.round(utilization * 100)}% of capacity.`,
+    `Peak demand of ${actualPeakMW.toLocaleString()} MW expected around ${peakHour}.`,
+    `Average forecasted demand: ${actualAvgMW.toLocaleString()} MW.`,
+    changeLabel
+      ? `Demand change: ${changeLabel}.`
+      : `Grid utilization reaching ${Math.round(utilization * 100)}% of capacity.`,
     riskLevel === "Critical" || riskLevel === "High"
       ? "⚠️ High grid stress expected — load management protocols advised."
       : riskLevel === "Medium"
-      ? "Grid stress is moderate. Monitor transmission bottlenecks."
-      : "Grid expected to handle projected loads comfortably.",
+        ? "Grid stress is moderate. Monitor transmission bottlenecks."
+        : "Grid expected to handle projected loads comfortably.",
     `Forecast confidence: ${confidencePct}%.`,
   ];
 
   return {
-    predictedDemand: avgMW,
+    predictedDemand: actualAvgMW,
     rawValue,
     rawUnit,
     currentCapacity: capacityMW,
     peakHour,
-    predictedPeakMW: actualPeakMW,
+    predictedPeakMW: actualPeakMW,   // ✅ kept from your version
     riskLevel,
     hourlyDemand: hourly,
     insights,
@@ -120,7 +183,9 @@ function buildPrediction(
   };
 }
 
-/** Approximate location capacity (MW) — static grid data. Covers both States and Cities. */
+const INDIA_CAPACITY = 270000; // ✅ from teammate — needed for national view
+
+/** Covers both states and cities — your version, more complete */
 const LOCATION_CAPACITY: Record<string, number> = {
   // States
   "Delhi": 9000, "ER Odisha": 7000, "Goa": 1000, "Gujarat": 28000,
@@ -142,7 +207,7 @@ const LOCATION_CAPACITY: Record<string, number> = {
   "Guwahati": 1000, "Dehradun": 800, "Shimla": 400, "Srinagar": 800,
 };
 
-const DEFAULT_CAPACITY = 1000; // Lower default for unknown cities
+const DEFAULT_CAPACITY = 1000; // ✅ your value — realistic for unknown cities
 
 export default function Home() {
   const [locations, setLocations] = useState<LocationMarker[]>([]);
@@ -154,7 +219,6 @@ export default function Home() {
     label: "Forecast Until Tomorrow",
   });
 
-  // ML API state
   const [prediction, setPrediction] = useState<ApiPrediction | null>(null);
   const [isPredicting, setIsPredicting] = useState(false);
   const [predictionError, setPredictionError] = useState<string | null>(null);
@@ -164,8 +228,8 @@ export default function Home() {
       .then((res) => res.json())
       .then((data) => {
         if (data.status === "success") {
-          const cities = data.cities.map((c: any) => ({ ...c, type: "city" }));
-          const states = data.states.map((s: any) => ({ ...s, type: "state" }));
+          const cities = data.cities.map((c: { name: string; lat: number; lng: number }) => ({ ...c, type: "city" }));
+          const states = data.states.map((s: { name: string; lat: number; lng: number }) => ({ ...s, type: "state" }));
           setLocations([...states, ...cities]);
         }
       })
@@ -187,22 +251,38 @@ export default function Home() {
   );
 
   const fetchPrediction = useCallback(async () => {
-    if (!selectedMarker) {
-      setPrediction(null);
-      setPredictionError(null);
-      return;
-    }
-
     setIsPredicting(true);
     setPredictionError(null);
     setPrediction(null);
 
     try {
       let avgMW: number;
-      let peakMW: number;
+      let peakMW: number | undefined;
       let rawValue: number;
       let rawUnit: string;
       let confidencePct = 85;
+
+      if (!selectedMarker) {
+        // ✅ Teammate's national India view
+        const indiaRes = await fetch(
+          `${API_BASE}/predict/india?forecast_date=${targetDateStr}`
+        );
+        if (!indiaRes.ok) {
+          const errBody = await indiaRes.json().catch(() => ({}));
+          throw new Error(errBody?.detail || `API error ${indiaRes.status}`);
+        }
+        const data = await indiaRes.json();
+        rawValue = data.predicted_demand_mu;
+        rawUnit = "MU";
+        avgMW = Math.round((rawValue * 1000) / 24);
+        peakMW = Math.round(data.predicted_max_demand_mw); // use ML peak if provided
+        confidencePct = 88;
+
+        setPrediction(
+          buildPrediction(avgMW, peakMW, rawValue, rawUnit, INDIA_CAPACITY, confidencePct, "India", targetDateStr)
+        );
+        return;
+      }
 
       if (selectedMarker.type === "city") {
         const cityRes = await fetch(`${API_BASE}/predict/city`, {
@@ -210,19 +290,15 @@ export default function Home() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ city: selectedMarker.name, date: targetDateStr }),
         });
-
         if (!cityRes.ok) {
           const errBody = await cityRes.json().catch(() => ({}));
           throw new Error(errBody?.detail || `API error ${cityRes.status}`);
         }
-
         const data = await cityRes.json();
-        const predictedMWh = data.predicted_demand_mwh;
-        rawValue = Number((predictedMWh / 1000).toFixed(2));
-        rawUnit = "MU";
-        avgMW = Math.round(predictedMWh / 24);
-        // Peak will be derived from curve in buildPrediction
-        peakMW = undefined as any; 
+        rawValue = data.predicted_demand_mwh;
+        rawUnit = "MWh";
+        avgMW = Math.round(rawValue / 24);
+        peakMW = undefined; // cities: derive from curve
         confidencePct = 90;
       } else {
         const stateRes = await fetch(`${API_BASE}/predict/state`, {
@@ -230,34 +306,22 @@ export default function Home() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ state: selectedMarker.name, date: targetDateStr }),
         });
-
         if (!stateRes.ok) {
           const errBody = await stateRes.json().catch(() => ({}));
           throw new Error(errBody?.detail || `API error ${stateRes.status}`);
         }
-
         const data = await stateRes.json();
         rawValue = data.predicted_demand_mu;
         rawUnit = "MU";
-        peakMW = Math.round(data.predicted_max_demand_mw);
-        // Convert Daily MU (Million Units) to Average MWh for the chart
+        peakMW = Math.round(data.predicted_max_demand_mw); // ✅ ML peak for states
         avgMW = Math.round((rawValue * 1000) / 24);
         confidencePct = 80;
       }
 
-      const capacity =
-        LOCATION_CAPACITY[selectedMarker.name] ?? DEFAULT_CAPACITY;
-
-      const built = buildPrediction(
-        avgMW,
-        peakMW,
-        rawValue,
-        rawUnit,
-        capacity,
-        confidencePct,
-        selectedMarker.name
+      const capacity = LOCATION_CAPACITY[selectedMarker.name] ?? DEFAULT_CAPACITY;
+      setPrediction(
+        buildPrediction(avgMW, peakMW, rawValue, rawUnit, capacity, confidencePct, selectedMarker.name, targetDateStr)
       );
-      setPrediction(built);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       setPredictionError(msg);
@@ -296,20 +360,15 @@ export default function Home() {
     ? `${selectedMarker.name} (${selectedMarker.type === "state" ? "State" : "City"})`
     : "India (All States)";
 
-  const isLoading = isPredicting;
-
   return (
     <main className="min-h-screen bg-cream">
       <HeroSection />
 
       <div id="dashboard" className="max-w-[1280px] mx-auto py-16 space-y-6">
 
-        {/* Forecast Settings — only if a location is selected */}
-        {selectedMarker && (
-          <ForecastControls currentMode={forecastMode} onModeChange={setForecastMode} />
-        )}
+        {/* ✅ Teammate's UX: always-visible forecast controls */}
+        <ForecastControls currentMode={forecastMode} onModeChange={setForecastMode} />
 
-        {/* Breadcrumb + Filters */}
         {(selectedMarker || forecastMode.hours !== 24 || forecastMode.type !== "quick") && (
           <div className="px-5 md:px-10 lg:px-16 mt-2 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-xs text-text-muted">
@@ -332,7 +391,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Metrics */}
         <div className="relative">
           {isPredicting && (
             <div className="absolute top-4 right-4 text-xs font-semibold text-saffron animate-pulse bg-saffron/10 px-3 py-1 rounded-full z-10">
@@ -342,9 +400,8 @@ export default function Home() {
           <KeyMetrics
             prediction={prediction}
             locationName={locationName}
-            isLoading={isLoading}
+            isLoading={isPredicting}
             error={predictionError}
-            onRetry={fetchPrediction}
           />
         </div>
 
@@ -356,12 +413,13 @@ export default function Home() {
             onBack={handleBack}
           />
 
-          {/* Error banner */}
           {predictionError && (
             <div className="bento-card p-4 border-l-4 border-saffron bg-saffron/5 flex items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-navy">Could not reach the ML backend</p>
-                <p className="text-xs text-text-muted mt-0.5">{predictionError}. Make sure the FastAPI server is running on port 8000.</p>
+                <p className="text-xs text-text-muted mt-0.5">
+                  {predictionError}. Make sure the FastAPI server is running on port 8000.
+                </p>
               </div>
               <button
                 onClick={fetchPrediction}
@@ -376,19 +434,18 @@ export default function Home() {
             <DemandForecastChart
               data={prediction?.hourlyDemand ?? []}
               locationName={locationName}
-              isLoading={isLoading}
+              isLoading={isPredicting}
               demandChangePct={prediction?.demandChangePct}
-              confidencePct={prediction?.confidencePct}
               peakHour={prediction?.peakHour}
             />
             <GridStressChart
               data={prediction?.hourlyDemand ?? []}
               locationName={locationName}
-              isLoading={isLoading}
+              isLoading={isPredicting}
               utilizationPct={
                 prediction
                   ? Math.round((prediction.predictedPeakMW / prediction.currentCapacity) * 100)
-                  : null
+                  : null  // ✅ your formula: peak-based, not average-based
               }
             />
           </div>
