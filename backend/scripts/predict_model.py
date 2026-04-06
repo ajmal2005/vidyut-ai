@@ -4,7 +4,6 @@ import os
 import joblib
 
 def predict_energy(city, forecast_date, t_avg_c, humidity_pct):
-    # Models are in backend/models/city/
     models_dir = os.path.join(os.path.dirname(__file__), "..", "models", "city")
     model_path = os.path.join(models_dir, f"{city}_hybrid_model.pkl")
     if not os.path.exists(model_path):

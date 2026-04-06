@@ -56,7 +56,6 @@ def get_city_prediction(req: ForecastRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
-#State Forecasting
 class ForecastStateRequest(BaseModel):
     state: str = Field(..., example="Delhi", description="The registered name of the state.")
     date: str = Field(..., example="2026-06-15", description="The future target date in 'YYYY-MM-DD' format.")
@@ -91,7 +90,6 @@ def get_state_prediction(req: ForecastStateRequest):
 
 @app.get("/predict/india")
 def get_india_prediction(forecast_date: str = Query(default=None, description="Target date in YYYY-MM-DD format. Defaults to tomorrow.")):
-    """Predict national energy demand (Total MU) and peak demand (MW) for India."""
     try:
         if forecast_date is None:
             forecast_date = (date.today() + timedelta(days=1)).isoformat()
@@ -111,7 +109,6 @@ def get_india_prediction(forecast_date: str = Query(default=None, description="T
 
 @app.get("/locations")
 def get_locations():
-    """Returns available states and cities based on actual model files."""
     states_dir = os.path.join(os.path.dirname(__file__), "models", "state")
     cities_dir = os.path.join(os.path.dirname(__file__), "models", "city")
     india_model_path = os.path.join(os.path.dirname(__file__), "models", "india", "India_hybrid_model.pkl")
@@ -141,6 +138,6 @@ def get_locations():
     }
 
 if __name__ == "__main__":
-    print("\n[+] Starting Energy Demand Forecasting API on port 8000...")
-    print("[+] API Documentation available at: http://localhost:8000/docs\n")
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
+    print("\n[+] Starting Energy Demand Forecasting API on port 7860...")
+    print("[+] API Documentation available at: http://localhost:7860/docs\n")
+    uvicorn.run("server:app", host="0.0.0.0", port=7860, reload=True)

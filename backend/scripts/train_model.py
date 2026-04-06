@@ -8,7 +8,6 @@ from sklearn.metrics import mean_absolute_percentage_error, r2_score
 
 def perform_training():
     print(f"--- Training Hybrid Model for All Cities ---")
-    # Dataset is in root, script is in backend/scripts/
     file_path = os.path.join(os.path.dirname(__file__), "..", "..", "City_Daily_Energy_Final.csv") 
     if not os.path.exists(file_path):
         print(f"Dataset {os.path.abspath(file_path)} not found.")
@@ -54,7 +53,6 @@ def perform_training():
         final_predictions = test_df['Trend_Pred'] + xgb_model.predict(X_test_scaled)
         mape = mean_absolute_percentage_error(test_df[target], final_predictions)
         
-        # Export Model into backend/models/city/
         models_dir = os.path.join(os.path.dirname(__file__), "..", "models", "city")
         os.makedirs(models_dir, exist_ok=True)
         joblib.dump({

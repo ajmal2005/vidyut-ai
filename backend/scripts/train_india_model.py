@@ -10,7 +10,6 @@ def train_hybrid_target(train_df, test_df, features, target):
 
     from sklearn.linear_model import LinearRegression
     
-    # 1. Train the Linear Trend Model
     trend_model = LinearRegression()
     trend_model.fit(train_df[['TimeIndex']], train_df[target])
     
@@ -21,13 +20,11 @@ def train_hybrid_target(train_df, test_df, features, target):
     train_df['Residuals'] = train_df[target] - train_df['Trend_Pred']
     test_df['Trend_Pred'] = trend_model.predict(test_df[['TimeIndex']])
     
-    # 2. Prepare features for XGBoost
     weights = np.exp(-(train_df['TimeIndex'].max() - train_df['TimeIndex'])/365)
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(train_df[features])
     X_test_scaled = scaler.transform(test_df[features])
     
-    # 3. Train the XGBoost Residual Model
     xgb_model = xgb.XGBRegressor(
         n_estimators=300, 
         learning_rate=0.05, 
@@ -38,7 +35,6 @@ def train_hybrid_target(train_df, test_df, features, target):
     )
     xgb_model.fit(X_train_scaled, train_df['Residuals'], sample_weight=weights)
     
-    # 4. Evaluate
     final_predictions = test_df['Trend_Pred'] + xgb_model.predict(X_test_scaled)
     mape = mean_absolute_percentage_error(test_df[target], final_predictions)
     
@@ -68,13 +64,10 @@ def perform_training():
         train_df = df_country.iloc[:int(len(df_country)*0.8)].copy()
         test_df = df_country.iloc[int(len(df_country)*0.8):].copy()
         
-        # Train Total Energy (MU) Models
         mu_trend, mu_scaler, mu_xgb, mu_mape = train_hybrid_target(train_df, test_df, features, 'India_Energy_Required_MU')
         
-        # Train Peak Demand (MW) Models
         mw_trend, mw_scaler, mw_xgb, mw_mape = train_hybrid_target(train_df, test_df, features, 'India_Max_Demand_MW')
         
-        # Export Dual Model into backend/models/state/
         models_dir = os.path.join(os.path.dirname(__file__), "..", "models", "india")
         os.makedirs(models_dir, exist_ok=True)
         joblib.dump({

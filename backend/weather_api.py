@@ -5,8 +5,6 @@ import os
 import json
 import time
 
-# PRE-SET COORDINATES FOR ALL SUPPORTED LOCATIONS (Lat, Lon)
-# This eliminates the Geocoding API overhead (~7 seconds)
 LOCATION_COORDS = {
     "Agartala": (23.836, 91.279), "Ahmedabad": (23.026, 72.587), "Aizawl": (23.729, 92.718),
     "Andhra Pradesh": (16.514, 80.516), "Arunachal Pradesh": (27.087, 93.610), "Assam": (26.184, 91.746),
@@ -44,7 +42,6 @@ def get_cached_weather(location, date_str):
         key = f"{location}_{date_str}"
         if key in cache:
             entry = cache[key]
-            # Check expiry
             if time.time() - entry['timestamp'] < CACHE_EXPIRY_HOURS * 3600:
                 print(f"[CACHE HIT] Serving {location} for {date_str}")
                 return entry['t_avg'], entry['hum']
@@ -71,14 +68,11 @@ def save_to_cache(location, date_str, t_avg, hum):
     except: pass
 
 def fetch_weather_for_location(location_name: str, target_date: str):
-    # 1. Check local cache
     cached = get_cached_weather(location_name, target_date)
     if cached: return cached
 
-    # 2. Get Coordinates (Instant Lookup)
     coords = LOCATION_COORDS.get(location_name)
     if not coords:
-        # Fallback to geocoding if location is unknown (rare)
         print(f"[WARN] {location_name} not in preset coordinates. Falling back to Geocoding API...")
         url_geo = f"https://geocoding-api.open-meteo.com/v1/search?name={location_name}&count=1&language=en&format=json"
         res_geo = requests.get(url_geo).json()
@@ -87,19 +81,14 @@ def fetch_weather_for_location(location_name: str, target_date: str):
         lat, lon = res_geo['results'][0]['latitude'], res_geo['results'][0]['longitude']
     else:
         lat, lon = coords
-
-    # 3. Fetch Weather from Open-Meteo
     today = datetime.date.today()
     target_dt = datetime.datetime.strptime(target_date, "%Y-%m-%d").date()
     
     if target_dt > today + datetime.timedelta(days=14):
-        # Open-Meteo forecast API has limited range (14 days max)
-        # Fallback to historical data from the same day in 2024
         fallback_year = 2024
         try:
             fallback_dt = target_dt.replace(year=fallback_year)
         except ValueError:
-            # Handle Feb 29 on non-leap years
             fallback_dt = target_dt.replace(year=fallback_year, day=28)
             
         fallback_date_str = fallback_dt.strftime("%Y-%m-%d")
