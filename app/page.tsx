@@ -22,7 +22,11 @@ const IndiaMap = dynamic(() => import("@/components/IndiaMap"), {
   ),
 });
 
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://kalakatappa-vidyut-ai-api.hf.space";
+
+if (typeof window !== "undefined") {
+  console.log("[Vidyut-AI] API_BASE:", API_BASE);
+}
 
 function getDynamicLoadShape(dateStr?: string, locationName?: string): number[] {
   const date = dateStr ? new Date(dateStr) : new Date();

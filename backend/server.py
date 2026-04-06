@@ -25,6 +25,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def read_root():
+    return {"status": "healthy", "message": "Vidyut AI Energy Forecasting API is running!"}
+
 class ForecastRequest(BaseModel):
     city: str = Field(..., example="Mumbai", description="The registered name of the city.")
     date: str = Field(..., example="2026-06-15", description="The future target date in 'YYYY-MM-DD' format.")
